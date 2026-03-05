@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("D8ypRqJ45ZLAKmMPTLDuwJZubKgKbHZEXHrQ5T6ArVmE");
+declare_id!("Ews62Jxt9GSpFhMSuvweRBSQkyZhnMdCokDp9DpUcchx");
 
 #[program]
 pub mod solana_treasury_vault {
