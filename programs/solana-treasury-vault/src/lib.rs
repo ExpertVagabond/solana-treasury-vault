@@ -74,13 +74,17 @@ pub mod solana_treasury_vault {
             },
             &[seeds],
         ), amount)?;
+        let spent = new_spent;
+        let treasury_key = ctx.accounts.treasury.key();
+        let authority_pubkey = ctx.accounts.authority.key();
+        let recipient_key = ctx.accounts.recipient_token_account.key();
 
         emit!(TreasuryWithdrawal {
-            treasury: ctx.accounts.treasury.key(),
-            authority: ctx.accounts.authority.key(),
-            recipient: ctx.accounts.recipient_token_account.key(),
+            treasury: treasury_key,
+            authority: authority_pubkey,
+            recipient: recipient_key,
             amount,
-            spent_this_period: treasury.spent_this_period,
+            spent_this_period: spent,
         });
 
         Ok(())
