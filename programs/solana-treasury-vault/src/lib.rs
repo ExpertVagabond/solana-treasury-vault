@@ -16,6 +16,13 @@ pub mod solana_treasury_vault {
         treasury.period_start = Clock::get()?.unix_timestamp;
         treasury.period_length = 86400; // 24h default
         treasury.bump = ctx.bumps.treasury;
+
+        emit!(TreasuryInitialized {
+            authority: ctx.accounts.authority.key(),
+            mint: ctx.accounts.mint.key(),
+            spending_limit,
+        });
+
         Ok(())
     }
 
@@ -28,6 +35,13 @@ pub mod solana_treasury_vault {
                 authority: ctx.accounts.depositor.to_account_info(),
             },
         ), amount)?;
+
+        emit!(TreasuryDeposit {
+            treasury: ctx.accounts.treasury.key(),
+            depositor: ctx.accounts.depositor.key(),
+            amount,
+        });
+
         Ok(())
     }
 
@@ -60,17 +74,40 @@ pub mod solana_treasury_vault {
             },
             &[seeds],
         ), amount)?;
+
+        emit!(TreasuryWithdrawal {
+            treasury: ctx.accounts.treasury.key(),
+            authority: ctx.accounts.authority.key(),
+            recipient: ctx.accounts.recipient_token_account.key(),
+            amount,
+            spent_this_period: treasury.spent_this_period,
+        });
+
         Ok(())
     }
 
     pub fn update_spending_limit(ctx: Context<UpdateTreasury>, new_limit: u64) -> Result<()> {
+        let old_limit = ctx.accounts.treasury.spending_limit;
         ctx.accounts.treasury.spending_limit = new_limit;
+
+        emit!(SpendingLimitUpdated {
+            treasury: ctx.accounts.treasury.key(),
+            old_limit,
+            new_limit,
+        });
+
         Ok(())
     }
 
     pub fn update_period_length(ctx: Context<UpdateTreasury>, new_length: i64) -> Result<()> {
         require!(new_length > 0, TreasuryError::InvalidPeriod);
         ctx.accounts.treasury.period_length = new_length;
+
+        emit!(PeriodLengthUpdated {
+            treasury: ctx.accounts.treasury.key(),
+            new_length,
+        });
+
         Ok(())
     }
 }
@@ -145,4 +182,44 @@ pub enum TreasuryError {
     InvalidPeriod,
     #[msg("Overflow")]
     Overflow,
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct TreasuryInitialized {
+    pub authority: Pubkey,
+    pub mint: Pubkey,
+    pub spending_limit: u64,
+}
+
+#[event]
+pub struct TreasuryDeposit {
+    pub treasury: Pubkey,
+    pub depositor: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct TreasuryWithdrawal {
+    pub treasury: Pubkey,
+    pub authority: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub spent_this_period: u64,
+}
+
+#[event]
+pub struct SpendingLimitUpdated {
+    pub treasury: Pubkey,
+    pub old_limit: u64,
+    pub new_limit: u64,
+}
+
+#[event]
+pub struct PeriodLengthUpdated {
+    pub treasury: Pubkey,
+    pub new_length: i64,
 }
