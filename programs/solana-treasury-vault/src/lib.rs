@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token_interface::{Mint, TokenInterface, TokenAccount, TransferChecked, transfer_checked};
 
 declare_id!("Ews62Jxt9GSpFhMSuvweRBSQkyZhnMdCokDp9DpUcchx");
 
@@ -27,14 +27,15 @@ pub mod solana_treasury_vault {
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-        token::transfer(CpiContext::new(
+        transfer_checked(CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.depositor_token_account.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),
                 authority: ctx.accounts.depositor.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
             },
-        ), amount)?;
+        ), amount, ctx.accounts.mint.decimals)?;
 
         emit!(TreasuryDeposit {
             treasury: ctx.accounts.treasury.key(),
@@ -65,15 +66,16 @@ pub mod solana_treasury_vault {
         let bump = treasury.bump;
         let seeds: &[&[u8]] = &[b"treasury", authority_key.as_ref(), mint_key.as_ref(), &[bump]];
 
-        token::transfer(CpiContext::new_with_signer(
+        transfer_checked(CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.vault.to_account_info(),
                 to: ctx.accounts.recipient_token_account.to_account_info(),
                 authority: ctx.accounts.treasury.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
             },
             &[seeds],
-        ), amount)?;
+        ), amount, ctx.accounts.mint.decimals)?;
         let spent = new_spent;
         let treasury_key = ctx.accounts.treasury.key();
         let authority_pubkey = ctx.accounts.authority.key();
@@ -120,15 +122,15 @@ pub mod solana_treasury_vault {
 pub struct InitializeTreasury<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    pub mint: Account<'info, Mint>,
+    pub mint: InterfaceAccount<'info, Mint>,
     #[account(init, payer = authority, space = 8 + Treasury::INIT_SPACE,
         seeds = [b"treasury", authority.key().as_ref(), mint.key().as_ref()], bump)]
     pub treasury: Account<'info, Treasury>,
     #[account(init, payer = authority, token::mint = mint, token::authority = treasury,
         seeds = [b"vault", treasury.key().as_ref()], bump)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub rent: Sysvar<'info, Rent>,
 }
 
@@ -137,12 +139,15 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
     pub treasury: Account<'info, Treasury>,
+    /// The token mint matching the treasury.
+    #[account(constraint = mint.key() == treasury.mint)]
+    pub mint: InterfaceAccount<'info, Mint>,
     #[account(mut, seeds = [b"vault", treasury.key().as_ref()], bump,
         token::mint = treasury.mint, token::authority = treasury)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, constraint = depositor_token_account.mint == treasury.mint)]
-    pub depositor_token_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    pub depositor_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -151,12 +156,15 @@ pub struct Withdraw<'info> {
     #[account(mut, seeds = [b"treasury", treasury.authority.as_ref(), treasury.mint.as_ref()],
         bump = treasury.bump, has_one = authority)]
     pub treasury: Account<'info, Treasury>,
+    /// The token mint matching the treasury.
+    #[account(constraint = mint.key() == treasury.mint)]
+    pub mint: InterfaceAccount<'info, Mint>,
     #[account(mut, seeds = [b"vault", treasury.key().as_ref()], bump,
         token::mint = treasury.mint, token::authority = treasury)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, constraint = recipient_token_account.mint == treasury.mint)]
-    pub recipient_token_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
