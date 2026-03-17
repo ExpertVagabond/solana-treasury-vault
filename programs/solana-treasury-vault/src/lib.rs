@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface, TokenAccount, TransferChecked, transfer_checked};
+use anchor_spl::token_interface::{
+    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
+};
 
 declare_id!("Ews62Jxt9GSpFhMSuvweRBSQkyZhnMdCokDp9DpUcchx");
 
@@ -7,7 +9,10 @@ declare_id!("Ews62Jxt9GSpFhMSuvweRBSQkyZhnMdCokDp9DpUcchx");
 pub mod solana_treasury_vault {
     use super::*;
 
-    pub fn initialize_treasury(ctx: Context<InitializeTreasury>, spending_limit: u64) -> Result<()> {
+    pub fn initialize_treasury(
+        ctx: Context<InitializeTreasury>,
+        spending_limit: u64,
+    ) -> Result<()> {
         let treasury = &mut ctx.accounts.treasury;
         treasury.authority = ctx.accounts.authority.key();
         treasury.mint = ctx.accounts.mint.key();
@@ -27,15 +32,19 @@ pub mod solana_treasury_vault {
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-        transfer_checked(CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.depositor_token_account.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-                authority: ctx.accounts.depositor.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-            },
-        ), amount, ctx.accounts.mint.decimals)?;
+        transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.depositor_token_account.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.depositor.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+            ),
+            amount,
+            ctx.accounts.mint.decimals,
+        )?;
 
         emit!(TreasuryDeposit {
             treasury: ctx.accounts.treasury.key(),
@@ -51,31 +60,48 @@ pub mod solana_treasury_vault {
         let now = Clock::get()?.unix_timestamp;
 
         // Reset period if elapsed
-        let elapsed = now.checked_sub(treasury.period_start).ok_or(TreasuryError::Overflow)?;
+        let elapsed = now
+            .checked_sub(treasury.period_start)
+            .ok_or(TreasuryError::Overflow)?;
         if elapsed >= treasury.period_length {
             treasury.spent_this_period = 0;
             treasury.period_start = now;
         }
 
-        let new_spent = treasury.spent_this_period.checked_add(amount).ok_or(TreasuryError::Overflow)?;
-        require!(new_spent <= treasury.spending_limit, TreasuryError::SpendingLimitExceeded);
+        let new_spent = treasury
+            .spent_this_period
+            .checked_add(amount)
+            .ok_or(TreasuryError::Overflow)?;
+        require!(
+            new_spent <= treasury.spending_limit,
+            TreasuryError::SpendingLimitExceeded
+        );
         treasury.spent_this_period = new_spent;
 
         let authority_key = treasury.authority;
         let mint_key = treasury.mint;
         let bump = treasury.bump;
-        let seeds: &[&[u8]] = &[b"treasury", authority_key.as_ref(), mint_key.as_ref(), &[bump]];
+        let seeds: &[&[u8]] = &[
+            b"treasury",
+            authority_key.as_ref(),
+            mint_key.as_ref(),
+            &[bump],
+        ];
 
-        transfer_checked(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.recipient_token_account.to_account_info(),
-                authority: ctx.accounts.treasury.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-            },
-            &[seeds],
-        ), amount, ctx.accounts.mint.decimals)?;
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.recipient_token_account.to_account_info(),
+                    authority: ctx.accounts.treasury.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+            ctx.accounts.mint.decimals,
+        )?;
         let spent = new_spent;
         let treasury_key = ctx.accounts.treasury.key();
         let authority_pubkey = ctx.accounts.authority.key();
